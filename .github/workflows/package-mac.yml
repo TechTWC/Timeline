@@ -1,0 +1,147 @@
+name: Package macOS Local App
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'packaging/**'
+      - '.github/workflows/package-mac.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Enable pinned pnpm
+        working-directory: web
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.19.0 --activate
+          pnpm --version
+
+      - name: Install locked dependencies without lifecycle scripts
+        working-directory: web
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Test web app
+        working-directory: web
+        run: pnpm test
+
+      - name: Build web app for localhost root
+        working-directory: web
+        run: |
+          pnpm exec tsc -b --pretty false
+          pnpm exec vite build --base=./
+
+      - name: Build universal macOS launcher
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk macosx --show-sdk-path)"
+          mkdir -p build
+
+          xcrun swiftc packaging/TimelineLauncher.swift \
+            -O -framework Cocoa \
+            -target arm64-apple-macos13.0 -sdk "$SDK" \
+            -o build/TimelineLauncher-arm64
+
+          xcrun swiftc packaging/TimelineLauncher.swift \
+            -O -framework Cocoa \
+            -target x86_64-apple-macos13.0 -sdk "$SDK" \
+            -o build/TimelineLauncher-x86_64
+
+          lipo -create \
+            build/TimelineLauncher-arm64 \
+            build/TimelineLauncher-x86_64 \
+            -output build/TimelineLauncher
+
+          lipo -info build/TimelineLauncher
+
+      - name: Assemble private app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP='build/My Timeline Visualizer.app'
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/site"
+          cp build/TimelineLauncher "$APP/Contents/MacOS/TimelineLauncher"
+          cp -R web/dist/. "$APP/Contents/Resources/site/"
+
+          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDisplayName</key><string>My Timeline Visualizer</string>
+            <key>CFBundleExecutable</key><string>TimelineLauncher</string>
+            <key>CFBundleIdentifier</key><string>com.techtwc.timelinevisualizer.local</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>My Timeline Visualizer</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>0.1.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>LSMinimumSystemVersion</key><string>13.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          chmod 755 "$APP/Contents/MacOS/TimelineLauncher"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+      - name: Create user package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/package
+          cp -R 'build/My Timeline Visualizer.app' build/package/
+          cat > build/package/README.txt <<'TXT'
+          MY TIMELINE VISUALIZER v0.1 — PRIVATE LOCAL MAC BUILD
+
+          USE
+          1. Unzip the package.
+          2. Double-click "My Timeline Visualizer.app".
+          3. The app starts a web server bound only to 127.0.0.1:8765 and opens your default browser.
+          4. Keep the small launcher window open while using Timeline Visualizer.
+          5. Choose your real Timeline.json only through the browser file picker.
+          6. When finished, click Quit in the launcher window.
+
+          FIRST OPEN / GATEKEEPER
+          This is your own private GitHub build and is ad-hoc signed, not Apple-notarized.
+          If macOS blocks the first launch, do NOT disable Gatekeeper globally.
+          Instead Control-click (or right-click) the app, choose Open, then Open again.
+
+          PRIVACY
+          - Timeline.json is processed in your browser and is not uploaded to an application server.
+          - The launcher binds only to 127.0.0.1 (this Mac), not the LAN or internet.
+          - CARTO map tiles remain an external dependency. CARTO can observe your IP and requested map regions.
+          - Do not copy Timeline.json into the Git repository.
+          TXT
+
+          cd build/package
+          ditto -c -k --sequesterRsrc --keepParent 'My Timeline Visualizer.app' 'My-Timeline-Visualizer-macOS-v0.1.zip'
+          shasum -a 256 'My-Timeline-Visualizer-macOS-v0.1.zip' > 'SHA256.txt'
+          cat SHA256.txt
+
+      - name: Upload private local package
+        uses: actions/upload-artifact@v4
+        with:
+          name: My-Timeline-Visualizer-macOS-v0.1
+          path: |
+            build/package/My-Timeline-Visualizer-macOS-v0.1.zip
+            build/package/README.txt
+            build/package/SHA256.txt
+          if-no-files-found: error
+          retention-days: 7
