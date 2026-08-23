@@ -6,12 +6,15 @@ on:
       - main
     paths:
       - .github/workflows/bootstrap-web.yml
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   bootstrap:
+    if: github.event_name == 'push' || github.event.issue.title == '[bootstrap] web-v0.1'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout private target repository
@@ -162,7 +165,6 @@ jobs:
                     echo 'Repository privacy guard passed.'
           EOF
 
-          # Do not carry the bootstrap workflow into the product branch.
           rm -f .github/workflows/bootstrap-web.yml
 
           git config user.name 'github-actions[bot]'
