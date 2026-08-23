@@ -1,0 +1,57 @@
+name: Validate Web Replica
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.19.0 --activate
+
+      - name: Install locked dependencies without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Privacy and repository guard
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          suspicious="$(git ls-files | grep -Ei '(^|/)(Timeline\.json|[^/]*Timeline[^/]*\.json)$|\.mp4$|(^|/)\.env($|\.)' | grep -v '^web/public/sample-timeline.json$' || true)"
+          if [ -n "$suspicious" ]; then
+            echo 'Forbidden sensitive/generated files are tracked:'
+            echo "$suspicious"
+            exit 1
+          fi
+          if grep -RInE 'cloudflareinsights\.com|googletagmanager\.com|posthog|mixpanel|sentry\.io' web/src web/index.html web/public --exclude='sample-timeline.json'; then
+            echo 'Unexpected analytics/telemetry endpoint detected.'
+            exit 1
+          fi
+          echo 'Repository privacy guard passed.'
