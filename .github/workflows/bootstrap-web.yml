@@ -7,15 +7,13 @@ on:
       - main
     paths:
       - .github/workflows/bootstrap-web.yml
-  issues:
-    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   bootstrap:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.issue.title == '[bootstrap] web-v0.1'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout private target repository
@@ -87,7 +85,7 @@ jobs:
           - Imported scope: `web/` plus upstream `LICENSE`
           - Local derivative display name: `My Timeline Visualizer`
 
-          Upstream package scripts are not executed during bootstrap. Validation runs separately with `contents: read` only.
+          Upstream package scripts are not executed during bootstrap. Validation is added separately after import.
           EOF
 
           cat > README.md <<'EOF'
@@ -109,64 +107,6 @@ jobs:
 
           See `SECURITY.md` and `UPSTREAM.md`.
           EOF
-
-          mkdir -p .github/workflows
-          cat > .github/workflows/validate.yml <<'EOF'
-          name: Validate Web Replica
-
-          on:
-            push:
-              branches: [baseline/web-v0.1]
-            pull_request:
-              branches: [main]
-
-          permissions:
-            contents: read
-
-          jobs:
-            validate:
-              runs-on: ubuntu-latest
-              defaults:
-                run:
-                  working-directory: web
-              steps:
-                - name: Checkout
-                  uses: actions/checkout@v4
-                - name: Setup Node
-                  uses: actions/setup-node@v4
-                  with:
-                    node-version: '24'
-                    cache: 'pnpm'
-                    cache-dependency-path: web/pnpm-lock.yaml
-                - name: Enable pinned pnpm
-                  run: |
-                    corepack enable
-                    corepack prepare pnpm@11.19.0 --activate
-                - name: Install locked dependencies
-                  run: pnpm install --frozen-lockfile
-                - name: Unit tests
-                  run: pnpm test
-                - name: Build
-                  run: pnpm build
-                - name: Privacy and repository guard
-                  working-directory: .
-                  shell: bash
-                  run: |
-                    set -euo pipefail
-                    suspicious="$(git ls-files | grep -Ei '(^|/)(Timeline\.json|[^/]*Timeline[^/]*\.json)$|\.mp4$|(^|/)\.env($|\.)' | grep -v '^web/public/sample-timeline.json$' || true)"
-                    if [ -n "$suspicious" ]; then
-                      echo 'Forbidden sensitive/generated files are tracked:'
-                      echo "$suspicious"
-                      exit 1
-                    fi
-                    if grep -RInE 'cloudflareinsights\.com|googletagmanager\.com|posthog|mixpanel|sentry\.io' web/src web/index.html web/public --exclude='sample-timeline.json'; then
-                      echo 'Unexpected analytics/telemetry endpoint detected.'
-                      exit 1
-                    fi
-                    echo 'Repository privacy guard passed.'
-          EOF
-
-          rm -f .github/workflows/bootstrap-web.yml
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
