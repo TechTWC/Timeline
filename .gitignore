@@ -1,0 +1,9 @@
+Timeline.json
+*Timeline*.json
+!web/public/sample-timeline.json
+private-data/
+local-data/
+*.mp4
+.env
+.env.*
+.DS_Store
