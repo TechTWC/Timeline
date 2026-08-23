@@ -1,14 +1,17 @@
 # My Timeline Visualizer
 
-Private, local-first personal fork/reimplementation baseline based on `mahlernim/google-timeline-visualizer`.
+Private, local-first Web version based on the MIT-licensed [`mahlernim/google-timeline-visualizer`](https://github.com/mahlernim/google-timeline-visualizer).
 
-## Safety boundary
+## v0.1
 
-- Real Google `Timeline.json` exports must never be committed to this repository.
-- Development and CI use fictional/sample data only.
-- v0.1 is intended for local browser use only; no public deployment is authorized.
-- No backend, database, account login, or Timeline upload is permitted.
+- Browser import of Google Maps `Timeline.json`.
+- Browser-local Timeline processing and video generation.
+- Route preview/animation and video export inherited from the pinned upstream Web implementation.
+- No backend, database, login, location permission, or Timeline upload.
+- No public deployment authorized.
 
-## Upstream
+**Never place a real Google Timeline export inside this repository.** Select it only at runtime through the browser file picker.
 
-Based on https://github.com/mahlernim/google-timeline-visualizer (MIT License). Original copyright and license notices will be preserved.
+Map tiles still come from the upstream external map provider, so that provider can observe the requesting IP and requested map regions.
+
+See `SECURITY.md` and `UPSTREAM.md`.
