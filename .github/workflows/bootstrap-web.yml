@@ -1,0 +1,176 @@
+name: Bootstrap Web Replica
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/bootstrap-web.yml
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private target repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import pinned upstream Web app safely
+        shell: bash
+        env:
+          UPSTREAM_SHA: 03cd69dbdcf2f1ec86388a4ea3728bbb2ec065b8
+        run: |
+          set -euo pipefail
+
+          rm -rf /tmp/google-timeline-visualizer
+          git init -q /tmp/google-timeline-visualizer
+          git -C /tmp/google-timeline-visualizer remote add origin https://github.com/mahlernim/google-timeline-visualizer.git
+          git -C /tmp/google-timeline-visualizer fetch --depth 1 origin "$UPSTREAM_SHA"
+          git -C /tmp/google-timeline-visualizer checkout -q --detach FETCH_HEAD
+          test "$(git -C /tmp/google-timeline-visualizer rev-parse HEAD)" = "$UPSTREAM_SHA"
+
+          git fetch origin baseline/web-v0.1
+          git checkout -B baseline/web-v0.1 origin/baseline/web-v0.1
+
+          rm -rf web LICENSE
+          cp -R /tmp/google-timeline-visualizer/web ./web
+          cp /tmp/google-timeline-visualizer/LICENSE ./LICENSE
+
+          python3 - <<'PY'
+          from pathlib import Path
+          candidates = [Path('web/index.html'), Path('web/public/manifest.webmanifest'), *Path('web/src/locales').glob('*.ts')]
+          for path in candidates:
+              if path.exists():
+                  text = path.read_text(encoding='utf-8').replace('Timeline Visualizer', 'My Timeline Visualizer')
+                  path.write_text(text, encoding='utf-8')
+          PY
+
+          cat > .gitignore <<'EOF'
+          Timeline.json
+          *Timeline*.json
+          !web/public/sample-timeline.json
+          private-data/
+          local-data/
+          *.mp4
+          .env
+          .env.*
+          .DS_Store
+          EOF
+
+          cat > SECURITY.md <<'EOF'
+          # Security boundary
+
+          - Never commit a real Google Maps `Timeline.json` export.
+          - Development and CI use fictional/sample data only.
+          - No Timeline upload endpoint, backend Timeline processing, database, account login, location permission, or location telemetry.
+          - v0.1 is not authorized for public deployment.
+          - Runtime map tiles may be requested from the upstream map provider; requests can reveal the requesting IP and viewed map regions.
+          - Real Timeline files must remain browser-local.
+
+          The only Timeline-like JSON intentionally tracked is `web/public/sample-timeline.json`.
+          EOF
+
+          cat > UPSTREAM.md <<'EOF'
+          # Upstream provenance
+
+          - Project: `mahlernim/google-timeline-visualizer`
+          - License: MIT
+          - Pinned upstream commit: `03cd69dbdcf2f1ec86388a4ea3728bbb2ec065b8`
+          - Imported scope: `web/` plus upstream `LICENSE`
+          - Local derivative display name: `My Timeline Visualizer`
+
+          Upstream package scripts are not executed during bootstrap. Validation runs separately with `contents: read` only.
+          EOF
+
+          cat > README.md <<'EOF'
+          # My Timeline Visualizer
+
+          Private, local-first Web version based on the MIT-licensed [`mahlernim/google-timeline-visualizer`](https://github.com/mahlernim/google-timeline-visualizer).
+
+          ## v0.1
+
+          - Browser import of Google Maps `Timeline.json`.
+          - Browser-local Timeline processing and video generation.
+          - Route preview/animation and video export inherited from the pinned upstream Web implementation.
+          - No backend, database, login, location permission, or Timeline upload.
+          - No public deployment authorized.
+
+          **Never place a real Google Timeline export inside this repository.** Select it only at runtime through the browser file picker.
+
+          Map tiles still come from the upstream external map provider, so that provider can observe the requesting IP and requested map regions.
+
+          See `SECURITY.md` and `UPSTREAM.md`.
+          EOF
+
+          mkdir -p .github/workflows
+          cat > .github/workflows/validate.yml <<'EOF'
+          name: Validate Web Replica
+
+          on:
+            push:
+              branches: [baseline/web-v0.1]
+            pull_request:
+              branches: [main]
+
+          permissions:
+            contents: read
+
+          jobs:
+            validate:
+              runs-on: ubuntu-latest
+              defaults:
+                run:
+                  working-directory: web
+              steps:
+                - name: Checkout
+                  uses: actions/checkout@v4
+                - name: Setup Node
+                  uses: actions/setup-node@v4
+                  with:
+                    node-version: '24'
+                    cache: 'pnpm'
+                    cache-dependency-path: web/pnpm-lock.yaml
+                - name: Enable pinned pnpm
+                  run: |
+                    corepack enable
+                    corepack prepare pnpm@11.19.0 --activate
+                - name: Install locked dependencies
+                  run: pnpm install --frozen-lockfile
+                - name: Unit tests
+                  run: pnpm test
+                - name: Build
+                  run: pnpm build
+                - name: Privacy and repository guard
+                  working-directory: .
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    suspicious="$(git ls-files | grep -Ei '(^|/)(Timeline\.json|[^/]*Timeline[^/]*\.json)$|\.mp4$|(^|/)\.env($|\.)' | grep -v '^web/public/sample-timeline.json$' || true)"
+                    if [ -n "$suspicious" ]; then
+                      echo 'Forbidden sensitive/generated files are tracked:'
+                      echo "$suspicious"
+                      exit 1
+                    fi
+                    if grep -RInE 'cloudflareinsights\.com|googletagmanager\.com|posthog|mixpanel|sentry\.io' web/src web/index.html web/public --exclude='sample-timeline.json'; then
+                      echo 'Unexpected analytics/telemetry endpoint detected.'
+                      exit 1
+                    fi
+                    echo 'Repository privacy guard passed.'
+          EOF
+
+          # Do not carry the bootstrap workflow into the product branch.
+          rm -f .github/workflows/bootstrap-web.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'No bootstrap changes to commit.'
+            exit 0
+          fi
+          git commit -m 'feat: import pinned local-first web visualizer baseline'
+          git push origin baseline/web-v0.1
