@@ -2,18 +2,12 @@ name: Bootstrap Web Replica
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/bootstrap-web.yml
 
 permissions:
   contents: write
 
 jobs:
   bootstrap:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout private target repository
@@ -85,7 +79,7 @@ jobs:
           - Imported scope: `web/` plus upstream `LICENSE`
           - Local derivative display name: `My Timeline Visualizer`
 
-          Upstream package scripts are not executed during bootstrap. Validation is added separately after import.
+          Dependency installation during bootstrap uses `--ignore-scripts`. Tests and build run only after the source is pinned and copied.
           EOF
 
           cat > README.md <<'EOF'
@@ -108,6 +102,37 @@ jobs:
           See `SECURITY.md` and `UPSTREAM.md`.
           EOF
 
+      - name: Validate dependency lock, tests and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@11.19.0 --activate
+          cd web
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm test
+          pnpm build
+
+      - name: Privacy and repository guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          suspicious="$(git ls-files | grep -Ei '(^|/)(Timeline\.json|[^/]*Timeline[^/]*\.json)$|\.mp4$|(^|/)\.env($|\.)' | grep -v '^web/public/sample-timeline.json$' || true)"
+          if [ -n "$suspicious" ]; then
+            echo 'Forbidden sensitive/generated files are already tracked:'
+            echo "$suspicious"
+            exit 1
+          fi
+          if grep -RInE 'cloudflareinsights\.com|googletagmanager\.com|posthog|mixpanel|sentry\.io' web/src web/index.html web/public --exclude='sample-timeline.json'; then
+            echo 'Unexpected analytics/telemetry endpoint detected.'
+            exit 1
+          fi
+          echo 'Privacy guard passed.'
+
+      - name: Commit validated baseline
+        shell: bash
+        run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
