@@ -22,13 +22,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
-          cache: 'pnpm'
-          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Enable pinned pnpm
         run: |
           corepack enable
           corepack prepare pnpm@11.19.0 --activate
+          pnpm --version
 
       - name: Install locked dependencies without lifecycle scripts
         run: pnpm install --frozen-lockfile --ignore-scripts
