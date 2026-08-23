@@ -1,6 +1,7 @@
 name: Bootstrap Web Replica
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -14,7 +15,7 @@ permissions:
 
 jobs:
   bootstrap:
-    if: github.event_name == 'push' || github.event.issue.title == '[bootstrap] web-v0.1'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push' || github.event.issue.title == '[bootstrap] web-v0.1'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout private target repository
