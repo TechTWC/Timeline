@@ -52,12 +52,12 @@ jobs:
           SDK="$(xcrun --sdk macosx --show-sdk-path)"
           mkdir -p build
 
-          xcrun swiftc packaging/TimelineLauncher.swift \
+          xcrun swiftc packaging/TimelineLauncherV2.swift \
             -O -framework Cocoa \
             -target arm64-apple-macos13.0 -sdk "$SDK" \
             -o build/TimelineLauncher-arm64
 
-          xcrun swiftc packaging/TimelineLauncher.swift \
+          xcrun swiftc packaging/TimelineLauncherV2.swift \
             -O -framework Cocoa \
             -target x86_64-apple-macos13.0 -sdk "$SDK" \
             -o build/TimelineLauncher-x86_64
@@ -68,6 +68,28 @@ jobs:
             -output build/TimelineLauncher
 
           lipo -info build/TimelineLauncher
+
+      - name: Smoke test localhost HTTP server
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./build/TimelineLauncher --serve-only "$PWD/web/dist" 18765 > /tmp/timeline-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          for i in {1..30}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:18765/ -o /tmp/timeline-index.html; then
+              break
+            fi
+            sleep 0.2
+          done
+
+          grep -q 'My Timeline Visualizer' /tmp/timeline-index.html
+          ASSET="$(sed -n 's/.*src="\.\/\([^"]*\.js\)".*/\1/p' /tmp/timeline-index.html | head -1)"
+          test -n "$ASSET"
+          curl -fsS --max-time 3 "http://127.0.0.1:18765/$ASSET" -o /tmp/timeline-app.js
+          test -s /tmp/timeline-app.js
+          echo "Localhost smoke test passed: index + $ASSET"
 
       - name: Assemble private app bundle
         shell: bash
@@ -89,8 +111,8 @@ jobs:
             <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
             <key>CFBundleName</key><string>My Timeline Visualizer</string>
             <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>0.1.0</string>
-            <key>CFBundleVersion</key><string>1</string>
+            <key>CFBundleShortVersionString</key><string>0.1.1</string>
+            <key>CFBundleVersion</key><string>2</string>
             <key>LSMinimumSystemVersion</key><string>13.0</string>
             <key>NSHighResolutionCapable</key><true/>
           </dict>
@@ -108,20 +130,24 @@ jobs:
           mkdir -p build/package
           cp -R 'build/My Timeline Visualizer.app' build/package/
           cat > build/package/README.txt <<'TXT'
-          MY TIMELINE VISUALIZER v0.1 — PRIVATE LOCAL MAC BUILD
+          MY TIMELINE VISUALIZER v0.1.1 — PRIVATE LOCAL MAC BUILD
+
+          FIXED IN v0.1.1
+          - Fixes Safari hanging on a blank 127.0.0.1 page.
+          - Package CI now performs a real localhost HTTP smoke test before producing the ZIP.
 
           USE
-          1. Unzip the package.
-          2. Double-click "My Timeline Visualizer.app".
-          3. The app starts a web server bound only to 127.0.0.1:8765 and opens your default browser.
-          4. Keep the small launcher window open while using Timeline Visualizer.
-          5. Choose your real Timeline.json only through the browser file picker.
-          6. When finished, click Quit in the launcher window.
+          1. Quit and delete the old v0.1 app first.
+          2. Unzip this package.
+          3. Double-click "My Timeline Visualizer.app".
+          4. The app serves only 127.0.0.1:8765 and opens your browser.
+          5. Try the fictional sample first, then choose Timeline.json through the browser file picker.
+          6. Click Quit in the launcher window when finished.
 
           FIRST OPEN / GATEKEEPER
           This is your own private GitHub build and is ad-hoc signed, not Apple-notarized.
           If macOS blocks the first launch, do NOT disable Gatekeeper globally.
-          Instead Control-click (or right-click) the app, choose Open, then Open again.
+          Use System Settings > Privacy & Security > Open Anyway, or Control-click the app > Open.
 
           PRIVACY
           - Timeline.json is processed in your browser and is not uploaded to an application server.
@@ -131,16 +157,16 @@ jobs:
           TXT
 
           cd build/package
-          ditto -c -k --sequesterRsrc --keepParent 'My Timeline Visualizer.app' 'My-Timeline-Visualizer-macOS-v0.1.zip'
-          shasum -a 256 'My-Timeline-Visualizer-macOS-v0.1.zip' > 'SHA256.txt'
+          ditto -c -k --sequesterRsrc --keepParent 'My Timeline Visualizer.app' 'My-Timeline-Visualizer-macOS-v0.1.1.zip'
+          shasum -a 256 'My-Timeline-Visualizer-macOS-v0.1.1.zip' > 'SHA256.txt'
           cat SHA256.txt
 
       - name: Upload private local package
         uses: actions/upload-artifact@v4
         with:
-          name: My-Timeline-Visualizer-macOS-v0.1
+          name: My-Timeline-Visualizer-macOS-v0.1.1
           path: |
-            build/package/My-Timeline-Visualizer-macOS-v0.1.zip
+            build/package/My-Timeline-Visualizer-macOS-v0.1.1.zip
             build/package/README.txt
             build/package/SHA256.txt
           if-no-files-found: error
