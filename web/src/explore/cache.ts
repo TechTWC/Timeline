@@ -27,7 +27,12 @@ function elementType(value: unknown): value is OsmElementType {
 
 function cachedPoi(value: unknown): value is OsmExplorePoi {
   if (!isObject(value) || !isObject(value.osm)) return false;
-  return typeof value.id === 'string'
+  const type = value.osm.elementType;
+  const id = value.osm.elementId;
+  if (!elementType(type) || typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) return false;
+  return value.id === `osm:${type}:${id}`
+    && typeof value.category === 'string'
+    && value.category.trim() !== ''
     && typeof value.latitude === 'number'
     && Number.isFinite(value.latitude)
     && value.latitude >= -85.05112878
@@ -35,11 +40,7 @@ function cachedPoi(value: unknown): value is OsmExplorePoi {
     && typeof value.longitude === 'number'
     && Number.isFinite(value.longitude)
     && value.longitude >= -180
-    && value.longitude <= 180
-    && typeof value.osm.elementId === 'number'
-    && Number.isSafeInteger(value.osm.elementId)
-    && value.osm.elementId > 0
-    && elementType(value.osm.elementType);
+    && value.longitude <= 180;
 }
 
 function cachePayload(value: unknown): value is CachePayload {
