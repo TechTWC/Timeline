@@ -152,14 +152,13 @@ describe('OverpassClient', () => {
   });
 
   it('allows only one active request at a time', async () => {
-    let release: ((response: Response) => void) | null = null;
+    let release!: (response: Response) => void;
     const pending = new Promise<Response>((resolve) => {
       release = resolve;
     });
     const client = new OverpassClient({ fetcher: async () => pending });
     const first = client.fetchPois(bbox);
     await expect(client.fetchPois(bbox)).rejects.toMatchObject({ code: 'request-active' });
-    if (!release) throw new Error('Test response release was not initialized.');
     release(new Response(JSON.stringify({ elements: [] }), { status: 200 }));
     await expect(first).resolves.toEqual([]);
   });
