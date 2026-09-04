@@ -20,7 +20,7 @@ function poi(id: number, latitude: number): OsmExplorePoi {
 }
 
 const route: GeoPoint[] = [
-  { instant: new Date('2026-01-01T00:00:00Z'), latitude: 25.001, longitude: 121 },
+  { instant: new Date('2026-01-01T00:00:00Z'), latitude: 25.002, longitude: 121 },
 ];
 const visits: SemanticVisit[] = [{
   startTime: new Date('2026-01-01T00:00:00Z'),
@@ -35,7 +35,7 @@ describe('Explore analysis', () => {
   it('classifies and summarizes eligible POIs without creating a score', () => {
     const items = classifyExplorePois([
       poi(1, 25),
-      poi(2, 25.001),
+      poi(2, 25.002),
       poi(3, 25.01),
     ], visits, route);
     expect(items.map((item) => item.classification.status)).toEqual([
@@ -58,7 +58,7 @@ describe('Explore analysis', () => {
   });
 
   it('finds the nearest local route evidence point', () => {
-    const target = poi(1, 25.0009);
+    const target = poi(1, 25.0019);
     const nearest = nearestRoutePoint(target, route, coordinateDistanceMeters);
     expect(nearest?.instant.toISOString()).toBe('2026-01-01T00:00:00.000Z');
   });
