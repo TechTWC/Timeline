@@ -1,4 +1,3 @@
-import type { GeoPoint } from '../types';
 import {
   DEFAULT_EXPLORATION_THRESHOLDS,
   type ExplorationClassification,
@@ -97,8 +96,4 @@ export function classifyExploration(
     nearestRouteDistanceMeters,
     matchedVisit: null,
   };
-}
-
-export function routePointsFromGeoPoints(points: readonly GeoPoint[]): readonly GeoPoint[] {
-  return points;
 }
