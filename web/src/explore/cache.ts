@@ -30,10 +30,15 @@ function cachedPoi(value: unknown): value is OsmExplorePoi {
   return typeof value.id === 'string'
     && typeof value.latitude === 'number'
     && Number.isFinite(value.latitude)
+    && value.latitude >= -85.05112878
+    && value.latitude <= 85.05112878
     && typeof value.longitude === 'number'
     && Number.isFinite(value.longitude)
+    && value.longitude >= -180
+    && value.longitude <= 180
     && typeof value.osm.elementId === 'number'
     && Number.isSafeInteger(value.osm.elementId)
+    && value.osm.elementId > 0
     && elementType(value.osm.elementType);
 }
 
