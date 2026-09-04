@@ -21,6 +21,22 @@ export interface ExplorePoi {
   category?: string;
 }
 
+export type OsmElementType = 'node' | 'way' | 'relation';
+
+export interface OsmExplorePoi extends ExplorePoi {
+  osm: {
+    elementType: OsmElementType;
+    elementId: number;
+  };
+}
+
+export interface BoundingBox {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
 export interface ExplorationThresholds {
   visitedDistanceMeters: number;
   minimumVisitDurationMs: number;
