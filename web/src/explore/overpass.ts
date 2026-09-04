@@ -197,7 +197,7 @@ export class OverpassClient {
     const controller = new AbortController();
     this.activeController = controller;
     let timedOut = false;
-    const timeout = window.setTimeout(() => {
+    const timeout = globalThis.setTimeout(() => {
       timedOut = true;
       controller.abort();
     }, this.timeoutMs);
@@ -233,7 +233,7 @@ export class OverpassClient {
       if (error instanceof OverpassError) throw error;
       throw new OverpassError('network', 'The Explore POI request could not reach the provider.');
     } finally {
-      window.clearTimeout(timeout);
+      globalThis.clearTimeout(timeout);
       signal?.removeEventListener('abort', forwardAbort);
       this.activeController = null;
     }
